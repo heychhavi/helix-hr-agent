@@ -7,7 +7,8 @@ from ai import RecruitingAI
 from dotenv import load_dotenv
 from response_handler import HelixResponseHandler
 import eventlet
-eventlet.monkey_patch()
+from models import db, EmailSequence, Conversation
+from config import config
 
 # Load environment variables
 load_dotenv()
@@ -18,22 +19,14 @@ logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
+app.config.from_object(config['development'])
 
 # Configure CORS
-CORS(app, resources={
-    r"/*": {
-        "origins": ["http://localhost:3000", "http://localhost:3001", "http://10.0.0.209:3000"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"],
-        "supports_credentials": True
-    }
-})
-app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'helix_recruiting_assistant_secret_2024')
-
-# Initialize SocketIO with CORS settings
+CORS(app, resources={r"/*": {"origins": app.config['CORS_ALLOWED_ORIGINS']}})
+db.init_app(app)
 socketio = SocketIO(
     app,
-    cors_allowed_origins=["http://localhost:3000", "http://localhost:3001", "http://10.0.0.209:3000"],
+    cors_allowed_origins=app.config['CORS_ALLOWED_ORIGINS'],
     async_mode='eventlet',
     ping_timeout=60,
     ping_interval=25,
@@ -54,9 +47,45 @@ logger.info("Starting SocketIO server on port 3002")
 ai_handler = HelixResponseHandler()
 logger.info("Initialized HelixResponseHandler")
 
+# Create database tables
+with app.app_context():
+    db.create_all()
+    logging.info("Database tables created successfully")
+
 @app.route('/')
 def index():
     return 'Helix Recruiting Assistant API'
+
+@app.route('/api/test-db')
+def test_db():
+    try:
+        # Test database connection
+        db.session.execute('SELECT 1')
+        
+        # Get table information
+        email_sequences_count = EmailSequence.query.count()
+        conversations_count = Conversation.query.count()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Database connection successful',
+            'tables': {
+                'email_sequences': {
+                    'exists': True,
+                    'count': email_sequences_count
+                },
+                'conversations': {
+                    'exists': True,
+                    'count': conversations_count
+                }
+            }
+        })
+    except Exception as e:
+        logging.error(f"Database connection error: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Database connection failed: {str(e)}'
+        }), 500
 
 @app.route('/api/personas')
 def get_personas():
@@ -80,12 +109,14 @@ def get_personas():
 
 @socketio.on('connect')
 def handle_connect():
-    logging.info('Client connected')
+    """Handle client connection."""
+    logging.info("Client connected")
     socketio.emit('connection_status', {'status': 'connected'}, room=request.sid)
 
 @socketio.on('test_connection')
 def handle_test_connection(data):
-    logging.info(f'Received test connection: {data}')
+    """Handle test connection."""
+    logging.info(f"Received test connection: {data}")
     socketio.emit('test_response', {'message': 'Test connection successful'}, room=request.sid)
 
 @socketio.on('disconnect')
@@ -98,10 +129,18 @@ def handle_message(data):
         message = data.get('message', '')
         messages = data.get('messages', [])
         persona = data.get('persona', 'corporate_pro')
+        sequence_generated = data.get('sequence_generated', False)
         
         logging.info(f"Received chat message: {message}")
         logging.info(f"Current messages: {messages}")
         logging.info(f"Selected persona: {persona}")
+        logging.info(f"Sequence generated: {sequence_generated}")
+        
+        # Save conversation to database
+        if messages:
+            conversation = Conversation(messages=messages, persona=persona)
+            db.session.add(conversation)
+            db.session.commit()
         
         # Handle initial message or greeting
         if not messages or len(messages) == 1 or message.lower() in ['hi', 'hello', 'hey']:
@@ -118,6 +157,17 @@ def handle_message(data):
         # For follow-up messages
         if message:
             logging.info("Processing follow-up message")
+            
+            # If sequence was already generated, handle feedback
+            if sequence_generated:
+                logging.info("Handling post-sequence feedback")
+                feedback_response = ai_handler.handle_sequence_feedback(message)
+                socketio.emit('chat_message', {
+                    'role': 'assistant',
+                    'content': feedback_response
+                }, room=request.sid)
+                return
+                
             # Update conversation state
             ai_handler.update_required_info(message)
             
@@ -130,7 +180,25 @@ def handle_message(data):
                     'content': response
                 }, room=request.sid)
                 sequence = ai_handler.generate_email_sequence(messages, persona)
+                
+                # Save sequence to database
+                email_sequence = EmailSequence(
+                    persona=persona,
+                    tone=data.get('tone', 'professional'),
+                    sequence_type=data.get('sequenceType', 'passive'),
+                    content=sequence
+                )
+                db.session.add(email_sequence)
+                db.session.commit()
+                
                 socketio.emit('sequence_update', {'content': sequence}, room=request.sid)
+                
+                # Send follow-up message asking for feedback
+                feedback_prompt = "How's that sequence? I can help you refine it further - would you like me to make any specific improvements? For example:\n1. Make it more technical\n2. Add more specific examples\n3. Adjust the tone\n4. Make it more concise\n5. Add more personalization"
+                socketio.emit('chat_message', {
+                    'role': 'assistant',
+                    'content': feedback_prompt
+                }, room=request.sid)
             else:
                 logging.info("Sending follow-up question")
                 next_question = ai_handler.get_next_question(persona)
@@ -223,11 +291,33 @@ def handle_magic_action(data):
         
         if action == 'enhance_personalization':
             enhanced_sequence = ai_handler.enhance_personalization(content, role_info)
+            
+            # Save enhanced sequence
+            email_sequence = EmailSequence(
+                persona=data.get('persona', 'corporate_pro'),
+                tone=tone,
+                sequence_type=sequence_type,
+                content=enhanced_sequence
+            )
+            db.session.add(email_sequence)
+            db.session.commit()
+            
             socketio.emit('sequence_update', {'content': enhanced_sequence}, room=request.sid)
             
         elif action == 'refresh':
             # Generate a new sequence with current settings
             sequence = ai_handler.generate_email_sequence(role_info, tone)
+            
+            # Save new sequence
+            email_sequence = EmailSequence(
+                persona=data.get('persona', 'corporate_pro'),
+                tone=tone,
+                sequence_type=sequence_type,
+                content=sequence
+            )
+            db.session.add(email_sequence)
+            db.session.commit()
+            
             socketio.emit('sequence_update', {'content': sequence}, room=request.sid)
             
         elif action == 'download':

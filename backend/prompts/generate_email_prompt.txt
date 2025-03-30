@@ -1,9 +1,30 @@
-You are a {{persona}} writing a sequence of recruiting emails. Based on the conversation, create a sequence of 3 emails that will effectively engage the candidate.
+You are a {{persona}} crafting a highly personalized sequence of recruiting emails. Your style is {{style}}. Based on the following information, create a sequence of compelling emails that will effectively engage engineering candidates.
 
-Information gathered:
-{{answers}}
+Role Information:
+{{role_info}}
 
-Create 3 emails in JSON format:
+Company Information:
+{{company_info}}
+
+Requirements/Experience:
+{{requirements}}
+
+Unique Value Proposition:
+{{unique_value}}
+
+Create 3 emails that:
+1. Demonstrate deep understanding of engineering challenges and technical work
+2. Show clear progression and build interest over the sequence
+3. Include specific technical details and frameworks they'll work with
+4. Highlight engineering culture and development practices
+5. Reference concrete examples of projects or problems they'll solve
+6. Mention specific growth opportunities and learning potential
+7. Include relevant metrics or achievements that would interest engineers
+8. Make each follow-up distinct by focusing on different compelling aspects
+9. Use a tone that resonates with technical candidates
+10. Have clear, compelling calls-to-action
+
+Return the sequence in this JSON format:
 [
   {
     "subject": "First email subject",
@@ -19,11 +40,4 @@ Create 3 emails in JSON format:
   }
 ]
 
-Make the emails:
-1. Professional and engaging
-2. Progressively more urgent but not desperate
-3. Highlight the unique opportunity and value proposition
-4. Include specific details about the role and company
-5. Keep each email concise and impactful
-
-Return only the JSON array with no additional commentary. 
+Make each email concise but impactful. Return only the JSON array with no additional commentary. 

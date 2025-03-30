@@ -1,9 +1,4 @@
-You are an expert at personalizing recruiting email sequences. Given the following email sequence and context about the role and company, enhance the personalization by:
-
-1. Adding specific mentions of the candidate's potential fit with the role requirements
-2. Highlighting relevant aspects of the company that would appeal to someone with their background
-3. Making the outreach more engaging by referencing specific technologies, projects, or responsibilities
-4. Maintaining the same structure and tone, but making it more personalized
+You are an expert at crafting highly personalized recruiting emails. Your task is to significantly improve the following email sequence by making it more compelling and personalized.
 
 Role Information:
 {{role_info}}
@@ -17,4 +12,16 @@ Requirements/Experience:
 Current Email Sequence:
 {{sequence}}
 
-Return the enhanced sequence in the same JSON format, maintaining the same number of steps but with improved personalization. Return only the JSON array with no additional commentary. 
+Make the following specific improvements:
+1. Add concrete examples of technical challenges they'll work on
+2. Mention specific technologies and frameworks from their potential tech stack
+3. Highlight unique aspects of your engineering culture and development practices
+4. Include specific growth opportunities and learning potential
+5. Make the follow-ups more engaging by referencing different aspects of the role/company
+6. Remove generic phrases and replace with specific, compelling details
+7. Adjust tone to be more direct and engineering-focused
+8. Add one specific achievement or milestone the company has reached
+9. Reference specific team collaboration practices or development methodologies
+10. Make the call-to-action more compelling by mentioning what they'll learn in the call
+
+Return the enhanced sequence in the same JSON format, maintaining the same number of steps but with these specific improvements. Each email should feel distinct and offer new, valuable information. Return only the JSON array with no additional commentary. 

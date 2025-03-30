@@ -154,14 +154,24 @@ function App() {
       return;
     }
 
-    const newMessage: Message = { role: 'user', content: message };
+    const newMessage: Message = {
+      role: 'user' as const,
+      content: message
+    };
+
     setMessages(prev => [...prev, newMessage]);
 
     socket.emit('chat_message', {
       message,
       messages: [...messages, newMessage],
-      persona: selectedPersona
+      persona: selectedPersona,
+      sequence_generated: content !== '' // Track if sequence has been generated
     });
+  };
+
+  const handleSequenceUpdate = (data: { content: string }) => {
+    console.log('Received sequence update:', data);
+    setContent(data.content);
   };
 
   const handleToneChange = (tone: string) => {

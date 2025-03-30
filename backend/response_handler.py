@@ -158,10 +158,39 @@ class HelixResponseHandler:
     def generate_email_sequence(self, messages: List[Dict], persona: str) -> str:
         """Generate the email sequence based on collected information."""
         try:
-            prompt = self.load_prompt('generate_email_prompt.txt', {
+            # Extract key information from conversation
+            role_info = ""
+            company_info = ""
+            requirements = ""
+            unique_value = ""
+            
+            for msg in messages:
+                if msg.get('role') == 'user':
+                    content = msg.get('content', '').lower()
+                    if any(keyword in content for keyword in ['engineer', 'developer', 'manager', 'director']):
+                        role_info = msg.get('content')
+                    if any(keyword in content for keyword in ['company', 'startup', 'mission', 'product']):
+                        company_info = msg.get('content')
+                    if any(keyword in content for keyword in ['requirements', 'experience', 'skills']):
+                        requirements = msg.get('content')
+                    if any(keyword in content for keyword in ['unique', 'exciting', 'opportunity']):
+                        unique_value = msg.get('content')
+
+            # Get persona style
+            persona_style = self.persona_data.get(persona, self.persona_data['corporate_pro'])['style']
+            
+            # Create context for the prompt
+            context = {
                 'persona': persona,
+                'style': persona_style,
+                'role_info': role_info,
+                'company_info': company_info,
+                'requirements': requirements,
+                'unique_value': unique_value,
                 'history': self.format_history(messages)
-            })
+            }
+            
+            prompt = self.load_prompt('generate_email_prompt.txt', context)
             response = self.model.generate_content(prompt)
             return response.text
         except Exception as e:
@@ -227,10 +256,36 @@ class HelixResponseHandler:
             logging.error(f"Error editing sequence: {str(e)}")
             return f"Error editing sequence: {str(e)}"
 
+    def handle_sequence_feedback(self, feedback: str) -> str:
+        """Handle feedback on the generated sequence and provide appropriate responses."""
+        feedback_lower = feedback.lower()
+        
+        # Detect the type of feedback
+        if any(word in feedback_lower for word in ['technical', 'tech', 'stack', 'framework']):
+            return "I'll enhance the technical details. Would you like me to focus on specific technologies or technical challenges?"
+            
+        elif any(word in feedback_lower for word in ['specific', 'example', 'concrete']):
+            return "I'll add more specific examples. Should I focus on project examples, technical achievements, or both?"
+            
+        elif any(word in feedback_lower for word in ['tone', 'formal', 'casual', 'friendly']):
+            return "I can adjust the tone. Would you prefer it to be more formal and professional, or more casual and conversational?"
+            
+        elif any(word in feedback_lower for word in ['concise', 'shorter', 'brief']):
+            return "I'll make it more concise. Would you like me to focus on shortening specific emails or the entire sequence?"
+            
+        elif any(word in feedback_lower for word in ['personal', 'personalize', 'customize']):
+            return "I'll add more personalization. Should I focus on personalizing based on the candidate's background, skills, or potential impact?"
+            
+        elif any(word in feedback_lower for word in ['good', 'great', 'perfect', 'works']):
+            return "I'm glad you like the sequence! Feel free to use the magic actions to download it or make any final tweaks."
+            
+        else:
+            return "I'd be happy to improve the sequence. Could you specify what aspects you'd like me to focus on? For example:\n1. Technical details\n2. Specific examples\n3. Tone adjustment\n4. Length/conciseness\n5. Personalization"
+
     def enhance_personalization(self, sequence: str, messages: List[Dict]) -> str:
         """Enhance the personalization of the email sequence using conversation context."""
         try:
-            # Extract relevant information from messages
+            # Extract key information from messages
             role_info = ""
             company_info = ""
             requirements = ""

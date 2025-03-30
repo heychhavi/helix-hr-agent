@@ -8,23 +8,20 @@ class EmailSequence(db.Model):
     __tablename__ = 'email_sequences'
     
     id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.Text, nullable=False)
     persona = db.Column(db.String(50), nullable=False)
-    tone = db.Column(db.String(50), nullable=False)
-    sequence_type = db.Column(db.String(50), nullable=False)
-    content = db.Column(db.JSON, nullable=False)
+    tone = db.Column(db.String(50), nullable=True)
+    sequence_type = db.Column(db.String(50), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
-        """Convert model to dictionary."""
         return {
             'id': self.id,
+            'content': self.content,
             'persona': self.persona,
             'tone': self.tone,
             'sequence_type': self.sequence_type,
-            'content': self.content,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat()
+            'created_at': self.created_at.isoformat()
         }
 
 class Conversation(db.Model):
@@ -35,9 +32,8 @@ class Conversation(db.Model):
     messages = db.Column(db.JSON, nullable=False)
     persona = db.Column(db.String(50), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     def to_dict(self):
-        """Convert model to dictionary."""
         return {
             'id': self.id,
             'messages': self.messages,

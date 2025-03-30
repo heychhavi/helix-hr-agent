@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Stack, Typography, Select, MenuItem, SelectChangeEvent, Snackbar, Alert, Chip, Fade, AppBar, Toolbar } from '@mui/material';
+import { Box, Stack, Typography, Select, MenuItem, SelectChangeEvent, Snackbar, Alert, Chip, Fade, AppBar, Toolbar, Container, CssBaseline, ThemeProvider, createTheme, Button } from '@mui/material';
 import { io, Socket } from 'socket.io-client';
 import ChatInterface from './components/ChatInterface';
 import Workspace from './components/Workspace';
@@ -18,6 +18,14 @@ interface Persona {
   description: string;
   tone: string;
   sequenceType: string;
+}
+
+interface Metrics {
+  open_rate: string;
+  response_rate: string;
+  sentiment: string;
+  personalization_score: string;
+  quality_score: string;
 }
 
 const PERSONAS: Persona[] = [
@@ -59,7 +67,18 @@ const PERSONAS: Persona[] = [
   }
 ];
 
-function App() {
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#4F46E5',
+    },
+    background: {
+      default: '#F3F4F6',
+    },
+  },
+});
+
+const App: React.FC = () => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedPersona, setSelectedPersona] = useState('corporate_pro');
@@ -68,6 +87,8 @@ function App() {
   const [content, setContent] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(false);
+  const [metrics, setMetrics] = useState<Metrics | undefined>(undefined);
+  const [suggestions, setSuggestions] = useState<string[] | undefined>(undefined);
 
   useEffect(() => {
     const newSocket = io('http://localhost:3002', {
@@ -85,7 +106,6 @@ function App() {
     newSocket.on('connect', () => {
       console.log('Connected to server');
       setError(null);
-      // Test emit on connect
       newSocket.emit('test_connection', { message: 'Test connection' });
     });
 
@@ -104,19 +124,59 @@ function App() {
       setMessages(prev => [...prev, message]);
     });
 
-    newSocket.on('sequence_update', (data: { content: string }) => {
+    newSocket.on('sequence_update', (data: { content: string; metrics: Metrics; suggestions: string[] }) => {
       console.log('Received sequence update:', data);
       setContent(data.content);
+      setMetrics(data.metrics);
+      setSuggestions(data.suggestions);
     });
 
     newSocket.on('test_response', (data: { message: string }) => {
       console.log('Received test response:', data);
     });
 
+    newSocket.on('context_summary', (data: any) => {
+      console.log('Received context summary:', data);
+      const summaryMessage: Message = {
+        role: 'assistant',
+        content: `Here's a summary of the role requirements:\n\n` +
+                `Role: ${data.role}\n` +
+                `Company Type: ${data.company_type}\n` +
+                `Key Requirements: ${data.key_requirements}\n` +
+                `Location: ${data.location}\n` +
+                `Unique Selling Points: ${data.unique_selling_points}`
+      };
+      setMessages(prev => [...prev, summaryMessage]);
+    });
+
     return () => {
       newSocket.close();
     };
   }, []);
+
+  const getInitialMessage = (persona: Persona): Message => {
+    let content: string;
+    
+    switch (persona.id) {
+      case 'startup_founder':
+        content = "Hi there! I'm Helix, your startup-focused recruiting assistant. I'll help you create dynamic and passionate outreach sequences that capture your startup's energy. What role are you looking to fill?";
+        break;
+      case 'friendly_recruiter':
+        content = "Hi! 😊 I'm Helix, your friendly recruiting assistant. I'll help you create warm and personalized outreach sequences that build genuine connections. What role are we recruiting for today?";
+        break;
+      case 'tech_expert':
+        content = "Hello! I'm Helix, your technical recruiting specialist. I'll help you craft detailed outreach sequences that resonate with engineering talent. What type of technical role are you recruiting for?";
+        break;
+      case 'corporate_pro':
+      default:
+        content = "Hello! I'm Helix, your professional recruiting assistant. I'll help you craft formal and structured outreach sequences that align with corporate excellence. What type of role are you recruiting for?";
+    }
+
+    return {
+      role: 'assistant',
+      content
+    };
+  };
 
   const handleGetStarted = (persona: string) => {
     const selectedPersonaObj = PERSONAS.find(p => p.id === persona);
@@ -125,9 +185,13 @@ function App() {
       setSelectedTone(selectedPersonaObj.tone);
       setSequenceType(selectedPersonaObj.sequenceType);
       setShowChat(true);
+      
+      const initialMessage = getInitialMessage(selectedPersonaObj);
+      setMessages([initialMessage]);
+
       socket?.emit('chat_message', {
         message: '',
-        messages: [],
+        messages: [initialMessage],
         persona: persona
       });
     }
@@ -139,10 +203,13 @@ function App() {
       setSelectedPersona(newPersona.id);
       setSelectedTone(newPersona.tone);
       setSequenceType(newPersona.sequenceType);
-      setMessages([]);
+      
+      const initialMessage = getInitialMessage(newPersona);
+      setMessages([initialMessage]);
+
       socket?.emit('chat_message', {
         message: '',
-        messages: [],
+        messages: [initialMessage],
         persona: newPersona.id
       });
     }
@@ -180,12 +247,19 @@ function App() {
       return;
     }
     setSelectedTone(tone);
-    socket.emit('update_tone', { 
+    socket.emit('adjust_tone', { 
       content,
       tone,
       sequenceType,
       roleInfo: messages 
     });
+
+    // Add a message to show the tone change
+    const message: Message = {
+      role: 'assistant',
+      content: `I've adjusted the tone to be more ${tone}. Let me know if you'd like any other changes.`
+    };
+    setMessages(prev => [...prev, message]);
   };
 
   const handleSequenceTypeChange = (type: string) => {
@@ -207,13 +281,21 @@ function App() {
       setError('Not connected to server. Please wait for reconnection.');
       return;
     }
-    socket.emit('magic_action', { 
-      content,
-      action,
-      tone: selectedTone,
-      sequenceType,
-      roleInfo: messages 
-    });
+
+    if (action === 'summarize_context') {
+      socket.emit('summarize_context', {
+        messages,
+        persona: selectedPersona
+      });
+    } else {
+      socket.emit('magic_action', { 
+        content,
+        action,
+        tone: selectedTone,
+        sequenceType,
+        roleInfo: messages 
+      });
+    }
   };
 
   const handleContentChange = (newContent: string) => {
@@ -243,152 +325,54 @@ function App() {
 
   const currentPersona = PERSONAS.find(p => p.id === selectedPersona);
 
-  if (!showChat) {
-    return <LandingPage onGetStarted={handleGetStarted} />;
-  }
-
   return (
-    <Fade in={showChat} timeout={800}>
-      <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fc' }}>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
         <AppBar position="static" elevation={0} sx={{ bgcolor: 'white', borderBottom: '1px solid #eaecf0' }}>
-          <Toolbar>
+          <Toolbar sx={{ minHeight: '56px' }}>
             <Stack direction="row" spacing={1} alignItems="center">
-              <Typography 
-                variant="h6" 
-                component="div" 
-                sx={{ 
-                  color: '#4F46E5',
-                  fontWeight: 600,
-                  fontSize: '1.5rem'
-                }}
-              >
+              <Typography variant="h6" sx={{ color: '#4F46E5', fontWeight: 600 }}>
                 Helix
               </Typography>
             </Stack>
             <Box sx={{ flexGrow: 1 }} />
-            <Stack direction="row" spacing={2}>
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  color: '#6B7280',
-                  '&:hover': { color: '#4F46E5' },
-                  cursor: 'pointer'
-                }}
-              >
-                Docs
-              </Typography>
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  color: '#6B7280',
-                  '&:hover': { color: '#4F46E5' },
-                  cursor: 'pointer'
-                }}
-              >
-                Settings
-              </Typography>
+            <Stack direction="row" spacing={3}>
+              <Button sx={{ color: '#6B7280' }}>Docs</Button>
+              <Button sx={{ color: '#6B7280' }}>Settings</Button>
+              <Button sx={{ color: '#6B7280' }}>JD</Button>
             </Stack>
           </Toolbar>
         </AppBar>
 
-        <Box sx={{ 
-          display: 'flex', 
-          flexGrow: 1,
-          gap: 0,
-          overflow: 'hidden'
-        }}>
-          <Box sx={{ 
-            width: '40%',
-            display: 'flex',
-            flexDirection: 'column',
-            borderRight: '1px solid #eaecf0',
-            bgcolor: 'white',
-          }}>
-            <Box sx={{ p: 3, borderBottom: '1px solid #eaecf0' }}>
-              <Stack spacing={1}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Chat with Helix
-                  </Typography>
-                </Stack>
-                <Typography variant="body2" color="text.secondary">
-                  I'll help you craft the perfect recruiting sequence
-                </Typography>
-              </Stack>
-            </Box>
-            <ChatInterface
+        <Container maxWidth={false} sx={{ flexGrow: 1, py: 0 }}>
+          {!showChat ? (
+            <LandingPage onGetStarted={handleGetStarted} />
+          ) : (
+            <Workspace
               messages={messages}
-              onSendMessage={handleSendMessage}
-              onGenerateSequence={handleGenerateSequence}
-            />
-          </Box>
-          
-          <Box sx={{ 
-            width: '60%',
-            display: 'flex',
-            flexDirection: 'column',
-            bgcolor: 'white',
-          }}>
-            <Box sx={{ p: 3, borderBottom: '1px solid #eaecf0' }}>
-              <Stack spacing={1}>
-                <Stack direction="row" spacing={2} alignItems="center">
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Recruiting Sequence
-                  </Typography>
-                  <Box sx={{ flexGrow: 1 }} />
-                  <Select
-                    value={selectedPersona}
-                    onChange={handlePersonaChange}
-                    size="small"
-                    sx={{ 
-                      minWidth: 200,
-                      '& .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#E5E7EB',
-                      },
-                      '&:hover .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#4F46E5',
-                      },
-                    }}
-                  >
-                    {PERSONAS.map((persona) => (
-                      <MenuItem key={persona.id} value={persona.id}>
-                        {persona.emoji} {persona.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </Stack>
-                {currentPersona && (
-                  <Typography variant="body2" color="text.secondary">
-                    {currentPersona.description}
-                  </Typography>
-                )}
-              </Stack>
-            </Box>
-            <Workspace 
+              selectedPersona={selectedPersona}
+              selectedTone={selectedTone}
+              sequenceType={sequenceType}
               content={content}
-              onChange={handleContentChange}
+              onPersonaChange={handlePersonaChange}
+              onSendMessage={handleSendMessage}
+              onSequenceUpdate={handleSequenceUpdate}
               onToneChange={handleToneChange}
               onSequenceTypeChange={handleSequenceTypeChange}
               onMagicAction={handleMagicAction}
-              selectedTone={selectedTone}
-              sequenceType={sequenceType}
+              onContentChange={handleContentChange}
+              onGenerateSequence={handleGenerateSequence}
+              personas={PERSONAS}
+              currentPersona={currentPersona}
+              metrics={metrics}
+              suggestions={suggestions}
             />
-          </Box>
-        </Box>
-
-        <Snackbar 
-          open={!!error} 
-          autoHideDuration={6000} 
-          onClose={() => setError(null)}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        >
-          <Alert severity="error" onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        </Snackbar>
+          )}
+        </Container>
       </Box>
-    </Fade>
+    </ThemeProvider>
   );
-}
+};
 
 export default App; 

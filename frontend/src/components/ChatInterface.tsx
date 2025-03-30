@@ -1,31 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {
-  Box,
-  TextField,
-  IconButton,
-  Paper,
-  Typography,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
-} from '@mui/material';
+import { Box, TextField, IconButton, Typography, Button, Paper } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
-type Message = {
+interface Message {
   role: 'user' | 'assistant';
   content: string;
-};
-
-interface ChatInterfaceProps {
-  messages: Message[];
-  onSendMessage: (message: string) => void;
-  isConnected: boolean;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, isConnected }) => {
+interface Props {
+  messages: Message[];
+  onSendMessage: (message: string) => void;
+  onGenerateSequence: () => void;
+}
+
+const ChatInterface: React.FC<Props> = ({ messages, onSendMessage, onGenerateSequence }) => {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -37,55 +29,120 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (input.trim() && isConnected) {
-      onSendMessage(input);
+    if (input.trim()) {
+      onSendMessage(input.trim());
       setInput('');
     }
   };
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Paper sx={{ flex: 1, overflow: 'auto', p: 2, display: 'flex', flexDirection: 'column' }}>
-        <List>
-          {messages.map((message, index) => (
-            <React.Fragment key={index}>
-              <ListItem
-                sx={{
-                  flexDirection: 'column',
-                  alignItems: message.role === 'user' ? 'flex-end' : 'flex-start',
-                }}
-              >
-                <Paper
-                  sx={{
-                    p: 2,
-                    maxWidth: '80%',
-                    backgroundColor: message.role === 'user' ? 'primary.light' : 'grey.100',
-                    color: message.role === 'user' ? 'white' : 'text.primary',
-                  }}
-                >
-                  <Typography variant="body1">{message.content}</Typography>
-                </Paper>
-              </ListItem>
-              <Divider variant="inset" component="li" />
-            </React.Fragment>
-          ))}
-          <div ref={messagesEndRef} />
-        </List>
-      </Paper>
-      <Box component="form" onSubmit={handleSubmit} sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+      <Box sx={{ 
+        p: 2, 
+        borderBottom: 1, 
+        borderColor: 'divider',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <Typography variant="h6" color="text.primary">Chat</Typography>
+        <Button
+          variant="contained"
+          onClick={onGenerateSequence}
+          startIcon={<AutoAwesomeIcon />}
+          sx={{
+            background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
+            boxShadow: '0 2px 4px rgba(33, 203, 243, .3)',
+            '&:hover': {
+              background: 'linear-gradient(45deg, #1976D2 30%, #21CBF3 90%)',
+            },
+          }}
+        >
+          Generate Sequence
+        </Button>
+      </Box>
+
+      <Box
+        ref={chatContainerRef}
+        sx={{
+          flexGrow: 1,
+          overflowY: 'auto',
+          p: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+          bgcolor: '#f8f9fa',
+        }}
+      >
+        {messages.map((message, index) => (
+          <Box
+            key={index}
+            sx={{
+              display: 'flex',
+              justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
+            }}
+          >
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                maxWidth: '80%',
+                borderRadius: 2,
+                bgcolor: message.role === 'user' ? '#2196F3' : 'white',
+                color: message.role === 'user' ? 'white' : 'text.primary',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              }}
+            >
+              <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                {message.content}
+              </Typography>
+            </Paper>
+          </Box>
+        ))}
+        <div ref={messagesEndRef} />
+      </Box>
+
+      <Box
+        component="form"
+        onSubmit={handleSubmit}
+        sx={{
+          p: 2,
+          borderTop: 1,
+          borderColor: 'divider',
+          bgcolor: 'white',
+        }}
+      >
         <Box sx={{ display: 'flex', gap: 1 }}>
           <TextField
             fullWidth
             variant="outlined"
-            placeholder={isConnected ? "Type your message..." : "Connecting to server..."}
+            placeholder="Type your message..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            disabled={!isConnected}
+            size="small"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 3,
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#2196F3',
+                },
+              },
+            }}
           />
           <IconButton 
             type="submit" 
-            color="primary" 
-            disabled={!input.trim() || !isConnected}
+            disabled={!input.trim()}
+            sx={{
+              bgcolor: '#2196F3',
+              color: 'white',
+              '&:hover': {
+                bgcolor: '#1976D2',
+              },
+              '&.Mui-disabled': {
+                bgcolor: 'action.disabledBackground',
+                color: 'action.disabled',
+              },
+            }}
           >
             <SendIcon />
           </IconButton>

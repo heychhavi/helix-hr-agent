@@ -1,181 +1,277 @@
-from flask import Flask, jsonify, request
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-from flask_cors import CORS
+from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
-from dotenv import load_dotenv
-import os
-from datetime import datetime
-from ai import RecruitingAI
+from flask_cors import CORS
 import logging
-import sys
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger(__name__)
+import os
+from ai import RecruitingAI
+from dotenv import load_dotenv
+from response_handler import HelixResponseHandler
 
 # Load environment variables
 load_dotenv()
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Configure database - use SQLite instead of PostgreSQL
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///helix.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev')
+# Configure CORS
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:3000", "http://localhost:3001", "http://10.0.0.209:3000"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"],
+        "supports_credentials": True
+    }
+})
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'helix_recruiting_assistant_secret_2024')
 
-# Initialize extensions
-db = SQLAlchemy(app)
-migrate = Migrate(app, db)
+# Initialize SocketIO with CORS settings
 socketio = SocketIO(
-    app, 
-    cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    logger=True, 
-    engineio_logger=True,
+    app,
+    cors_allowed_origins=["http://localhost:3000", "http://localhost:3001", "http://10.0.0.209:3000"],
+    async_mode='gevent',
     ping_timeout=60,
-    ping_interval=25
+    ping_interval=25,
+    logger=True,
+    engineio_logger=True
 )
 
-# Initialize AI
-try:
-    api_key = os.getenv('GOOGLE_API_KEY')
-    if not api_key or api_key == "your_google_api_key_here":
-        logger.warning("GOOGLE_API_KEY environment variable is not properly set, using placeholder")
-        api_key = "PLACEHOLDER_KEY"
-    ai = RecruitingAI(api_key)
-    logger.info("Successfully initialized RecruitingAI")
-except Exception as e:
-    logger.error(f"Failed to initialize RecruitingAI: {str(e)}")
-    raise
+# Initialize AI component
+api_key = os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    logger.warning("GOOGLE_API_KEY environment variable is not properly set")
+ai = RecruitingAI(api_key=api_key)
 
-# Models
-class Sequence(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+logger.info("Successfully initialized RecruitingAI")
+logger.info("Starting SocketIO server on port 3002")
 
-# Routes
+# Initialize AI handler
+ai_handler = HelixResponseHandler()
+logger.info("Initialized HelixResponseHandler")
+
 @app.route('/')
 def index():
-    return "Helix HR Agent API is running!"
+    return 'Helix Recruiting Assistant API'
 
-@app.route('/api/health')
-def health_check():
-    return jsonify({"status": "ok", "message": "API is running"})
+@app.route('/api/personas')
+def get_personas():
+    return jsonify([
+        {
+            "id": "friendly_recruiter",
+            "name": "Friendly Recruiter",
+            "description": "Warm and approachable communication style"
+        },
+        {
+            "id": "professional_recruiter",
+            "name": "Professional Recruiter",
+            "description": "Formal and business-oriented communication"
+        },
+        {
+            "id": "founder_recruiter",
+            "name": "Founder Recruiter",
+            "description": "Direct and passionate about the company mission"
+        }
+    ])
 
-@app.route('/api/sequences', methods=['GET'])
-def get_sequences():
-    sequences = Sequence.query.all()
-    return jsonify([{
-        'id': seq.id,
-        'title': seq.title,
-        'content': seq.content,
-        'created_at': seq.created_at.isoformat(),
-        'updated_at': seq.updated_at.isoformat()
-    } for seq in sequences])
-
-@app.route('/api/sequences', methods=['POST'])
-def create_sequence():
-    data = request.json
-    sequence = Sequence(
-        title=data['title'],
-        content=data['content']
-    )
-    db.session.add(sequence)
-    db.session.commit()
-    return jsonify({
-        'id': sequence.id,
-        'title': sequence.title,
-        'content': sequence.content,
-        'created_at': sequence.created_at.isoformat(),
-        'updated_at': sequence.updated_at.isoformat()
-    }), 201
-
-@app.route('/api/sequences/<int:sequence_id>', methods=['PUT'])
-def update_sequence(sequence_id):
-    sequence = Sequence.query.get_or_404(sequence_id)
-    data = request.json
-    sequence.title = data.get('title', sequence.title)
-    sequence.content = data.get('content', sequence.content)
-    db.session.commit()
-    return jsonify({
-        'id': sequence.id,
-        'title': sequence.title,
-        'content': sequence.content,
-        'created_at': sequence.created_at.isoformat(),
-        'updated_at': sequence.updated_at.isoformat()
-    })
-
-# Socket.IO events
 @socketio.on('connect')
-def handle_connect():
-    logger.info("Client connected")
-    emit('chat_message', {
-        'role': 'assistant',
-        'content': "Hello! I'm your HR recruiting assistant. How can I help you today?"
-    })
+async def handle_connect():
+    logging.info('Client connected')
+    await socketio.emit('connection_status', {'status': 'connected'}, room=request.sid)
+
+@socketio.on('test_connection')
+async def handle_test_connection(data):
+    logging.info(f'Received test connection: {data}')
+    await socketio.emit('test_response', {'message': 'Test connection successful'}, room=request.sid)
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    logger.info("Client disconnected")
+    logging.info("Client disconnected")
 
 @socketio.on('chat_message')
-def handle_chat_message(data):
+async def handle_message(data):
     try:
         message = data.get('message', '')
         messages = data.get('messages', [])
+        persona = data.get('persona', 'corporate_pro')
         
-        logger.info(f"Received chat message: '{message}', history length: {len(messages)}")
+        logging.info(f"Received chat message: {message}")
+        logging.info(f"Current messages: {messages}")
+        logging.info(f"Selected persona: {persona}")
         
-        # Generate AI response
-        ai_response = ai.generate_response(messages)
-        logger.info(f"Generated AI response: '{ai_response[:30]}...'")
-        
-        # Emit the response back to the client
-        emit('chat_message', {
-            'role': 'assistant',
-            'content': ai_response
-        })
-        
-        # If we have enough information, generate a sequence
-        if len(messages) >= 4:
-            logger.info("Generating sequence from conversation context")
-            role_info = {
-                'role': messages[0].get('content', ''),
-                'target_audience': messages[1].get('content', ''),
-                'requirements': messages[2].get('content', ''),
-                'company_culture': messages[3].get('content', '')
-            }
-            sequence = ai.generate_sequence(role_info)
-            emit('sequence_update', {'content': sequence})
-            logger.info(f"Sequence generated and sent to client: '{sequence[:30]}...'")
+        # Handle initial message or greeting
+        if not messages or len(messages) == 1 or message.lower() in ['hi', 'hello', 'hey']:
+            logging.info("Sending persona introduction")
+            intro_message = ai_handler.get_persona_intro(persona)
+            logging.info(f"Generated intro message: {intro_message}")
+            await socketio.emit('chat_message', {
+                'role': 'assistant',
+                'content': intro_message
+            }, room=request.sid)
+            logging.info("Sent persona introduction")
+            return
+            
+        # For follow-up messages
+        if message:
+            logging.info("Processing follow-up message")
+            # Update conversation state
+            ai_handler.update_required_info(message)
+            
+            # Get next question or generate sequence
+            if ai_handler.should_generate_sequence():
+                logging.info("Generating sequence")
+                await socketio.emit('chat_message', {
+                    'role': 'assistant',
+                    'content': "Thank you for providing all the details. I'll help you generate an engaging email sequence for this role."
+                }, room=request.sid)
+                sequence = await ai_handler.generate_email_sequence(messages, persona)
+                await socketio.emit('sequence_update', {'content': sequence}, room=request.sid)
+            else:
+                logging.info("Sending follow-up question")
+                next_question = ai_handler.get_next_question()
+                if next_question:
+                    logging.info(f"Generated next question: {next_question}")
+                    await socketio.emit('chat_message', {
+                        'role': 'assistant',
+                        'content': next_question
+                    }, room=request.sid)
+                else:
+                    logging.info("No next question available, sending default question")
+                    await socketio.emit('chat_message', {
+                        'role': 'assistant',
+                        'content': "Could you tell me more about your company and what makes it unique?"
+                    }, room=request.sid)
+            
     except Exception as e:
-        logger.error(f"Error handling chat message: {str(e)}")
-        emit('chat_message', {
+        logging.error(f"Error processing message: {str(e)}")
+        await socketio.emit('chat_message', {
             'role': 'assistant',
-            'content': f"I apologize, but I encountered an error: {str(e)}"
-        })
+            'content': 'I apologize, but I encountered an error. Please try again.'
+        }, room=request.sid)
+
+@socketio.on('update_tone')
+async def handle_tone_update(data):
+    try:
+        content = data.get('content', '')
+        tone = data.get('tone', 'professional')
+        sequence_type = data.get('sequenceType', 'passive')
+        role_info = data.get('roleInfo', [])
+        
+        # Extract role from messages
+        role = None
+        for msg in role_info:
+            if msg.get('role') == 'user':
+                role = ai._extract_role_info(msg.get('content', ''))
+                if role:
+                    break
+        
+        if role:
+            sequence = ai.generate_sequence(
+                role=role,
+                tone=tone,
+                step_count=3
+            )
+            await socketio.emit('sequence_update', {'content': sequence}, room=request.sid)
+            
+    except Exception as e:
+        logging.error(f"Error updating tone: {str(e)}")
+        await socketio.emit('error', {'message': 'Error updating tone'}, room=request.sid)
+
+@socketio.on('update_sequence_type')
+async def handle_sequence_type_update(data):
+    try:
+        content = data.get('content', '')
+        tone = data.get('tone', 'professional')
+        sequence_type = data.get('sequenceType', 'passive')
+        role_info = data.get('roleInfo', [])
+        
+        # Extract role from messages
+        role = None
+        for msg in role_info:
+            if msg.get('role') == 'user':
+                role = ai._extract_role_info(msg.get('content', ''))
+                if role:
+                    break
+        
+        if role:
+            sequence = ai.generate_sequence(
+                role=role,
+                tone=tone,
+                step_count=3 if sequence_type == 'passive' else 4
+            )
+            await socketio.emit('sequence_update', {'content': sequence}, room=request.sid)
+            
+    except Exception as e:
+        logging.error(f"Error updating sequence type: {str(e)}")
+        await socketio.emit('error', {'message': 'Error updating sequence type'}, room=request.sid)
+
+@socketio.on('magic_action')
+async def handle_magic_action(data):
+    try:
+        content = data.get('content', '')
+        action = data.get('action', '')
+        tone = data.get('tone', 'professional')
+        sequence_type = data.get('sequenceType', 'passive')
+        role_info = data.get('roleInfo', [])
+        
+        # Extract role from messages
+        role = None
+        for msg in role_info:
+            if msg.get('role') == 'user':
+                role = ai._extract_role_info(msg.get('content', ''))
+                if role:
+                    break
+        
+        if role:
+            # Map actions to configurations
+            action_config = {
+                'shorter': {'tone': tone, 'step_count': 2},
+                'urgent': {'tone': 'founder', 'step_count': 3},
+                'funny': {'tone': 'friendly', 'step_count': 3}
+            }
+            
+            config = action_config.get(action, {'tone': tone, 'step_count': 3})
+            sequence = ai.generate_sequence(
+                role=role,
+                tone=config['tone'],
+                step_count=config['step_count']
+            )
+            await socketio.emit('sequence_update', {'content': sequence}, room=request.sid)
+            
+    except Exception as e:
+        logging.error(f"Error applying magic action: {str(e)}")
+        await socketio.emit('error', {'message': 'Error applying magic action'}, room=request.sid)
+
+@socketio.on('generate_sequence')
+async def handle_generate_sequence(data):
+    try:
+        messages = data.get('messages', [])
+        tone = data.get('tone', 'professional')
+        sequence_type = data.get('sequenceType', 'passive')
+        
+        # Extract role from messages
+        role = None
+        for msg in messages:
+            if msg.get('role') == 'user':
+                role = ai._extract_role_info(msg.get('content', ''))
+                if role:
+                    break
+        
+        if role:
+            sequence = ai.generate_sequence(
+                role=role,
+                tone=tone,
+                step_count=3 if sequence_type == 'passive' else 4
+            )
+            await socketio.emit('sequence_update', {'content': sequence}, room=request.sid)
+        else:
+            await socketio.emit('error', {'message': 'Could not determine role from conversation'}, room=request.sid)
+            
+    except Exception as e:
+        logging.error(f"Error generating sequence: {str(e)}")
+        await socketio.emit('error', {'message': 'Error generating sequence'}, room=request.sid)
 
 if __name__ == '__main__':
-    try:
-        # Make sure database tables exist
-        with app.app_context():
-            db.create_all()
-            logger.info("Database tables created")
-        
-        # Start the Socket.IO server
-        logger.info("Starting SocketIO server on port 5001")
-        socketio.run(app, host='0.0.0.0', port=5001, debug=True)
-    except Exception as e:
-        logger.error(f"Error starting server: {str(e)}")
-        raise 
+    socketio.run(app, host='0.0.0.0', port=3002, debug=True) 

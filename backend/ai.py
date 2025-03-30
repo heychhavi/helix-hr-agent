@@ -1,180 +1,146 @@
-import google.generativeai as genai
-from typing import List, Dict, Any
 import logging
+import google.generativeai as genai
+from response_handler import HelixResponseHandler
+from typing import List, Dict, Optional
+import os
+import re
+from recruiting_graph import generate_email_sequence, EmailConfig
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class RecruitingAI:
-    def __init__(self, api_key: str):
-        self.use_mock = api_key == "PLACEHOLDER_KEY"
-        if self.use_mock:
-            logger.warning("Using mock responses since no valid API key was provided")
-        else:
-            try:
-                if not api_key:
-                    raise ValueError("API key is missing")
-                genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel('gemini-pro')
-                logger.info("Successfully initialized Gemini model")
-            except Exception as e:
-                logger.error(f"Error initializing Gemini: {str(e)}")
-                self.use_mock = True
-                logger.warning("Falling back to mock responses")
-
-    def generate_response(self, messages: List[Dict[str, str]]) -> str:
-        """Generate a response based on the conversation history."""
-        if self.use_mock:
-            return self._generate_mock_response(messages)
+    def __init__(self, api_key: str, live_mode: bool = True):
+        self.live_mode = live_mode
+        genai.configure(api_key=api_key)
+        self.response_handler = HelixResponseHandler()
+        logging.info(f"Initialized RecruitingAI in {'live' if live_mode else 'mock'} mode")
+        
+    async def generate_response(self, message: str, messages: list, persona: str) -> str:
+        """Generate a response based on the conversation context."""
+        if not self.live_mode:
+            return "Mock response in test mode"
             
         try:
-            if not messages:
-                return "Hello! I'm your HR recruiting assistant. How can I help you today?"
-
-            # Convert messages to Gemini format
-            prompt = "You are an expert HR recruiting assistant. Respond to the following conversation:\n\n"
-            for msg in messages:
-                role = "Human" if msg["role"] == "user" else "Assistant"
-                prompt += f"{role}: {msg['content']}\n\n"
-            
-            logger.info(f"Generating response for prompt length: {len(prompt)}")
-            
-            # Generate response
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.7,
-                    candidate_count=1,
-                    max_output_tokens=1000,
-                )
+            response = await self.response_handler.handle_response(
+                message=message,
+                history=messages,
+                persona=persona
             )
             
-            if not response.text:
-                logger.warning("Empty response received from Gemini")
-                return "I apologize, but I received an empty response. Please try again."
+            if response['type'] == 'error':
+                return "I apologize, but I encountered an error. Please try again."
                 
-            logger.info(f"Successfully generated response of length: {len(response.text)}")
-            return response.text
+            return response['content']
             
         except Exception as e:
-            logger.error(f"Error generating response: {str(e)}")
-            return f"I apologize, but I encountered an error: {str(e)}"
-
-    def generate_sequence(self, role_info: Dict[str, Any]) -> str:
-        """Generate a complete recruiting sequence based on role information."""
-        if self.use_mock:
-            return self._generate_mock_sequence(role_info)
+            logging.error(f"Error generating response: {str(e)}")
+            return "I apologize, but I encountered an error. Please try again."
             
+    def reset_conversation(self):
+        """Reset the conversation state."""
+        self.response_handler.reset()
+        
+    def generate_sequence(self, role: str, tone: str = "professional", step_count: int = 3, company_info: Optional[str] = None) -> List[Dict]:
+        """Generate an email sequence using LangChain"""
+        if not self.live_mode:
+            return self._generate_mock_sequence(role)
+            
+        config = EmailConfig(
+            role=role,
+            tone=tone,
+            step_count=step_count,
+            company_info=company_info or "Not provided"
+        )
+        
         try:
-            prompt = f"""Create a recruiting outreach sequence for the following role:
-            Role: {role_info.get('role', 'Not specified')}
-            Target Audience: {role_info.get('target_audience', 'Not specified')}
-            Key Requirements: {role_info.get('requirements', 'Not specified')}
-            Company Culture: {role_info.get('company_culture', 'Not specified')}
-            
-            Please create a sequence that includes:
-            1. Initial outreach message
-            2. Follow-up message (if no response)
-            3. Final message (if still no response)
-            
-            Format the output in markdown with clear sections and professional tone."""
-            
-            logger.info(f"Generating sequence for role: {role_info.get('role', 'Not specified')}")
-            
-            # Generate sequence
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.7,
-                    candidate_count=1,
-                    max_output_tokens=1500,
-                )
-            )
-            
-            if not response.text:
-                logger.warning("Empty sequence received from Gemini")
-                return "I apologize, but I received an empty response. Please try again."
-                
-            logger.info(f"Successfully generated sequence of length: {len(response.text)}")
-            return response.text
-            
+            return generate_email_sequence(config)
         except Exception as e:
-            logger.error(f"Error generating sequence: {str(e)}")
-            return f"I apologize, but I encountered an error: {str(e)}"
+            logging.error(f"Error generating sequence: {str(e)}")
+            return self._generate_mock_sequence(role)
             
-    def _generate_mock_response(self, messages: List[Dict[str, str]]) -> str:
-        """Generate a mock response for testing."""
-        if not messages:
-            return "Hello! I'm your HR recruiting assistant. How can I help you today?"
+    def _extract_role_info(self, message: str) -> Optional[str]:
+        """Extract role information from the message using multiple strategies"""
+        if not message:
+            return None
             
-        last_message = messages[-1]["content"].lower()
+        message_lower = message.lower()
         
-        if "hello" in last_message or "hi" in last_message:
-            return "Hi there! I'm your recruiting assistant. I can help you create personalized outreach sequences for your job openings. What role are you recruiting for?"
-            
-        if "role" in last_message or "position" in last_message or "job" in last_message:
-            return "Great! Could you tell me more about the target audience for this role? What kind of candidates are you looking to attract?"
-            
-        if "candidate" in last_message or "audience" in last_message:
-            return "That's helpful. What are the key requirements or skills needed for this position?"
-            
-        if "requirement" in last_message or "skill" in last_message:
-            return "Excellent. One last question - how would you describe your company culture? This will help me craft messages that reflect your organization's values."
-            
-        if "culture" in last_message or "company" in last_message:
-            return "Thank you for providing all this information! I've created a recruiting sequence based on what you've shared. You can view and edit it in the workspace panel."
-            
-        return "I understand. Is there anything specific about the recruiting sequence you'd like me to modify or explain?"
+        # Strategy 1: Direct role mention with common titles
+        common_roles = [
+            "engineer", "developer", "manager", "director", "vp", "lead",
+            "architect", "designer", "product manager", "data scientist",
+            "founding engineer", "senior engineer", "software engineer",
+            "fullstack engineer", "frontend engineer", "backend engineer"
+        ]
         
-    def _generate_mock_sequence(self, role_info: Dict[str, Any]) -> str:
-        """Generate a mock sequence for testing."""
-        role = role_info.get('role', 'the position')
+        for role in common_roles:
+            pattern = fr'\b{role}\b'
+            match = re.search(pattern, message_lower)
+            if match:
+                # Get the full role with any prefixes (e.g., "senior", "founding", etc.)
+                start = max(0, match.start() - 20)  # Look back up to 20 chars
+                prefix = message_lower[start:match.start()].strip()
+                if prefix:
+                    # Only include relevant prefixes
+                    prefix_words = prefix.split()
+                    relevant_prefixes = [word for word in prefix_words if word in ["senior", "founding", "lead", "principal"]]
+                    if relevant_prefixes:
+                        return f"{' '.join(relevant_prefixes)} {role}".title()
+                return role.title()
         
-        return """# Recruiting Outreach Sequence
+        # Strategy 2: Role after keywords
+        role_keywords = ["role", "position", "job", "candidate", "hiring", "recruiting for", "hire"]
+        for keyword in role_keywords:
+            if keyword in message_lower:
+                start_idx = message_lower.find(keyword) + len(keyword)
+                end_idx = message_lower.find(".", start_idx)
+                if end_idx == -1:
+                    end_idx = len(message_lower)
+                
+                role = message[start_idx:end_idx].strip()
+                if role:
+                    return role.strip("., ").title()
+        
+        # Strategy 3: Look for experience requirements
+        exp_patterns = [
+            r"(\d+)[\+]?\s*years?\s+(?:of\s+)?experience\s+(?:as\s+(?:a|an)\s+)?([^,.]+)",
+            r"looking\s+for\s+(?:a|an)\s+([^,.]+)",
+            r"hiring\s+(?:a|an)\s+([^,.]+)",
+            r"need\s+(?:a|an)\s+([^,.]+)"
+        ]
+        
+        for pattern in exp_patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                role = match.group(-1).strip()
+                if any(tech in role for tech in common_roles):
+                    return role.title()
+        
+        return None
+        
+    def _generate_mock_sequence(self, role: str) -> List[Dict]:
+        """Generate a mock email sequence for testing"""
+        return [
+            {
+                "subject": f"Exciting {role} Opportunity at Our Company",
+                "body": f"""Hi there,
 
-## Initial Outreach
+I hope this email finds you well. I came across your profile and was impressed by your experience in {role} roles.
 
-**Subject:** Exciting Opportunity at Our Company
-
-Dear [Candidate Name],
-
-I hope this message finds you well. I came across your profile and was impressed by your background in [relevant field]. We're currently looking for a talented professional to join our team as a **{role}**, and I believe your experience could be a great fit.
-
-Our company offers [brief value proposition] and a culture that [company culture highlight].
-
-Would you be interested in learning more about this opportunity? I'd be happy to share additional details or schedule a brief call at your convenience.
+Would you be interested in learning more about an exciting opportunity we have?
 
 Best regards,
-[Your Name]
+Recruiter"""
+            },
+            {
+                "subject": f"Following up on {role} Position",
+                "body": f"""Hi again,
 
-## Follow-up (5 days later)
+I wanted to follow up on my previous email about the {role} position.
 
-**Subject:** Re: Exciting Opportunity at Our Company
+I'd love to schedule a brief call to discuss this opportunity in more detail.
 
-Hello [Candidate Name],
-
-I wanted to follow up on my previous message regarding the **{role}** position at our company. 
-
-The role offers [key benefit/opportunity], and we're looking for someone with your expertise in [relevant skill].
-
-If you're interested, I'd love to hear back from you. If now isn't the right time, I completely understand.
-
-Warm regards,
-[Your Name]
-
-## Final Outreach (7 days after follow-up)
-
-**Subject:** One Last Note About Our Opportunity
-
-Hi [Candidate Name],
-
-I'm reaching out one final time regarding our **{role}** position. 
-
-Our team is moving forward with interviews, and I wanted to ensure you had the chance to be considered if you're interested.
-
-Feel free to reach out if you'd like to discuss this opportunity now or in the future.
-
-All the best,
-[Your Name]
-""".format(role=role) 
+Best regards,
+Recruiter"""
+            }
+        ] 

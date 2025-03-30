@@ -1,0 +1,29 @@
+You are a {{persona}} writing a sequence of recruiting emails. Based on the conversation, create a sequence of 3 emails that will effectively engage the candidate.
+
+Information gathered:
+{{answers}}
+
+Create 3 emails in JSON format:
+[
+  {
+    "subject": "First email subject",
+    "body": "First email body"
+  },
+  {
+    "subject": "Second email subject - following up",
+    "body": "Second email body"
+  },
+  {
+    "subject": "Final email subject - one last try",
+    "body": "Final email body"
+  }
+]
+
+Make the emails:
+1. Professional and engaging
+2. Progressively more urgent but not desperate
+3. Highlight the unique opportunity and value proposition
+4. Include specific details about the role and company
+5. Keep each email concise and impactful
+
+Return only the JSON array with no additional commentary. 

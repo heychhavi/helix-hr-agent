@@ -1,7 +1,6 @@
 import React from 'react';
-import { Box, Stack, Button, ButtonGroup, Select, MenuItem, FormControl, InputLabel, TextField, Typography } from '@mui/material';
-import { ContentCopy, Timer, EmojiEmotions } from '@mui/icons-material';
-import ReactMarkdown from 'react-markdown';
+import { Box, Stack, Typography, TextField, Button, Chip, IconButton } from '@mui/material';
+import { Add as AddIcon, Refresh as RefreshIcon, Download as DownloadIcon } from '@mui/icons-material';
 
 interface WorkspaceProps {
   content: string;
@@ -13,6 +12,11 @@ interface WorkspaceProps {
   sequenceType: string;
 }
 
+interface EmailStep {
+  subject: string;
+  body: string;
+}
+
 const Workspace: React.FC<WorkspaceProps> = ({
   content,
   onChange,
@@ -22,113 +26,211 @@ const Workspace: React.FC<WorkspaceProps> = ({
   selectedTone,
   sequenceType
 }) => {
-  const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onChange(event.target.value);
+  // Parse JSON content into EmailStep array
+  const parseContent = (jsonString: string): EmailStep[] => {
+    try {
+      // Remove markdown code block syntax if present
+      const cleanJson = jsonString.replace(/```json\n|\n```/g, '');
+      return JSON.parse(cleanJson);
+    } catch (e) {
+      console.error('Failed to parse sequence:', e);
+      return [];
+    }
+  };
+
+  const sequence = parseContent(content);
+
+  const handleAddStep = () => {
+    const newStep: EmailStep = {
+      subject: `Follow-up ${sequence.length + 1}`,
+      body: "Hi {{answers.candidate_name}},\n\nI hope this email finds you well..."
+    };
+    const newSequence = [...sequence, newStep];
+    onChange(JSON.stringify(newSequence, null, 2));
+  };
+
+  const handleApplySuggestion = () => {
+    onMagicAction('enhance_personalization');
   };
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2 }}>
-      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <InputLabel>Sequence Type</InputLabel>
-          <Select
-            value={sequenceType}
-            label="Sequence Type"
-            onChange={(e) => onSequenceTypeChange(e.target.value)}
-          >
-            <MenuItem value="passive">Passive Candidate</MenuItem>
-            <MenuItem value="aggressive">Aggressive Outreach</MenuItem>
-            <MenuItem value="soft">Soft Ping</MenuItem>
-          </Select>
-        </FormControl>
-
-        <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel>Tone</InputLabel>
-          <Select
-            value={selectedTone}
-            label="Tone"
-            onChange={(e) => onToneChange(e.target.value)}
-          >
-            <MenuItem value="professional">Professional</MenuItem>
-            <MenuItem value="friendly">Friendly</MenuItem>
-            <MenuItem value="founder">Founder-style</MenuItem>
-            <MenuItem value="playful">Playful</MenuItem>
-          </Select>
-        </FormControl>
-      </Stack>
-
-      <ButtonGroup variant="outlined" size="small" sx={{ mb: 2 }}>
-        <Button 
-          startIcon={<ContentCopy />}
-          onClick={() => onMagicAction('shorter')}
-        >
-          Make Shorter
-        </Button>
-        <Button 
-          startIcon={<Timer />}
-          onClick={() => onMagicAction('urgent')}
-        >
-          Add Urgency
-        </Button>
-        <Button 
-          startIcon={<EmojiEmotions />}
-          onClick={() => onMagicAction('funny')}
-        >
-          Make it Funny
-        </Button>
-      </ButtonGroup>
-
-      <Box sx={{ 
-        display: 'flex', 
-        gap: 2, 
-        flexGrow: 1,
-        height: 0 // Required for proper scrolling
-      }}>
-        <Box sx={{ 
-          width: '50%',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            Edit
+    <Box sx={{ p: 3, height: 'calc(100vh - 140px)', overflow: 'auto' }}>
+      <Stack spacing={4}>
+        <Box>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+            SEQUENCE STEPS
           </Typography>
-          <TextField
-            multiline
-            fullWidth
-            variant="outlined"
-            value={content}
-            onChange={handleChange}
-            sx={{ 
-              flexGrow: 1,
-              '& .MuiInputBase-root': {
-                height: '100%',
-                '& textarea': {
-                  height: '100% !important'
-                }
-              }
-            }}
-          />
+          <Stack spacing={3}>
+            {sequence.map((step, index) => (
+              <Box 
+                key={index}
+                sx={{
+                  p: 3,
+                  borderRadius: 2,
+                  bgcolor: '#f8f9fc',
+                  border: '1px solid #eaecf0'
+                }}
+              >
+                <Stack spacing={2}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                      {index === 0 ? 'Initial Outreach' : `Follow-up ${index}`}
+                    </Typography>
+                    <Chip 
+                      label={`Day ${index + 1}`} 
+                      size="small"
+                      sx={{ 
+                        bgcolor: '#E0E7FF',
+                        color: '#4F46E5',
+                        fontWeight: 500
+                      }}
+                    />
+                  </Stack>
+                  <TextField
+                    fullWidth
+                    label="Subject"
+                    value={step.subject}
+                    onChange={(e) => {
+                      const newSequence = [...sequence];
+                      newSequence[index].subject = e.target.value;
+                      onChange(JSON.stringify(newSequence, null, 2));
+                    }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        bgcolor: 'white'
+                      }
+                    }}
+                  />
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={4}
+                    label="Email Body"
+                    value={step.body}
+                    onChange={(e) => {
+                      const newSequence = [...sequence];
+                      newSequence[index].body = e.target.value;
+                      onChange(JSON.stringify(newSequence, null, 2));
+                    }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        bgcolor: 'white'
+                      }
+                    }}
+                  />
+                </Stack>
+              </Box>
+            ))}
+            <Button
+              startIcon={<AddIcon />}
+              onClick={handleAddStep}
+              sx={{
+                color: '#4F46E5',
+                '&:hover': { bgcolor: '#F5F3FF' }
+              }}
+            >
+              Add Step
+            </Button>
+          </Stack>
         </Box>
 
-        <Box sx={{ 
-          width: '50%',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            Preview
+        <Box>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+            AI SUGGESTIONS
           </Typography>
-          <Box sx={{ 
-            flexGrow: 1,
-            overflow: 'auto',
-            p: 2,
-            bgcolor: '#f8f9fa',
-            borderRadius: 1
-          }}>
-            <ReactMarkdown>{typeof content === 'string' ? content : JSON.stringify(content, null, 2)}</ReactMarkdown>
+          <Box
+            sx={{
+              p: 3,
+              borderRadius: 2,
+              bgcolor: '#F5F3FF',
+              border: '1px solid #E0E7FF'
+            }}
+          >
+            <Typography variant="subtitle2" sx={{ color: '#4F46E5', mb: 1 }}>
+              Suggested Follow-up
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2, color: '#6B7280' }}>
+              Consider adding a more personalized touch by mentioning specific projects or technologies that align with their experience.
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={handleApplySuggestion}
+              sx={{
+                color: '#4F46E5',
+                borderColor: '#E0E7FF',
+                '&:hover': {
+                  borderColor: '#4F46E5',
+                  bgcolor: '#F5F3FF'
+                }
+              }}
+            >
+              Apply Suggestion
+            </Button>
           </Box>
         </Box>
-      </Box>
+
+        <Box>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+            SEQUENCE ANALYTICS
+          </Typography>
+          <Stack direction="row" spacing={2}>
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: 2,
+                bgcolor: '#F0FDF4',
+                border: '1px solid #DCFCE7',
+                flex: 1
+              }}
+            >
+              <Typography variant="subtitle2" sx={{ color: '#16A34A' }}>
+                Estimated Open Rate
+              </Typography>
+              <Typography variant="h4" sx={{ color: '#16A34A', fontWeight: 600 }}>
+                65%
+              </Typography>
+            </Box>
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: 2,
+                bgcolor: '#F0F9FF',
+                border: '1px solid #DBEAFE',
+                flex: 1
+              }}
+            >
+              <Typography variant="subtitle2" sx={{ color: '#2563EB' }}>
+                Response Rate
+              </Typography>
+              <Typography variant="h4" sx={{ color: '#2563EB', fontWeight: 600 }}>
+                28%
+              </Typography>
+            </Box>
+          </Stack>
+        </Box>
+
+        <Stack direction="row" spacing={1} sx={{ pt: 2 }}>
+          <IconButton
+            onClick={() => onMagicAction('refresh')}
+            sx={{
+              color: '#4F46E5',
+              '&:hover': { bgcolor: '#F5F3FF' }
+            }}
+          >
+            <RefreshIcon />
+          </IconButton>
+          <IconButton
+            onClick={() => onMagicAction('download')}
+            sx={{
+              color: '#4F46E5',
+              '&:hover': { bgcolor: '#F5F3FF' }
+            }}
+          >
+            <DownloadIcon />
+          </IconButton>
+        </Stack>
+      </Stack>
     </Box>
   );
 };

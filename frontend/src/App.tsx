@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Stack, Typography, Select, MenuItem, SelectChangeEvent, Snackbar, Alert, Chip, Fade } from '@mui/material';
+import { Box, Stack, Typography, Select, MenuItem, SelectChangeEvent, Snackbar, Alert, Chip, Fade, AppBar, Toolbar } from '@mui/material';
 import { io, Socket } from 'socket.io-client';
 import ChatInterface from './components/ChatInterface';
 import Workspace from './components/Workspace';
@@ -239,80 +239,73 @@ function App() {
 
   return (
     <Fade in={showChat} timeout={800}>
-      <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: '#f5f5f5' }}>
-        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', bgcolor: 'white' }}>
-          <Stack spacing={2}>
-            <Stack direction="row" spacing={2} alignItems="center">
+      <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fc' }}>
+        <AppBar position="static" elevation={0} sx={{ bgcolor: 'white', borderBottom: '1px solid #eaecf0' }}>
+          <Toolbar>
+            <Stack direction="row" spacing={1} alignItems="center">
               <Typography 
                 variant="h6" 
                 component="div" 
                 sx={{ 
-                  flexGrow: 1,
-                  background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  fontWeight: 'bold'
+                  color: '#4F46E5',
+                  fontWeight: 600,
+                  fontSize: '1.5rem'
                 }}
               >
-                Helix Recruiting Assistant
+                Helix
               </Typography>
-              <Select
-                value={selectedPersona}
-                onChange={handlePersonaChange}
-                size="small"
+            </Stack>
+            <Box sx={{ flexGrow: 1 }} />
+            <Stack direction="row" spacing={2}>
+              <Typography 
+                variant="body2" 
                 sx={{ 
-                  minWidth: 200,
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#2196F3',
-                  },
-                  '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#21CBF3',
-                  },
+                  color: '#6B7280',
+                  '&:hover': { color: '#4F46E5' },
+                  cursor: 'pointer'
                 }}
               >
-                {PERSONAS.map((persona) => (
-                  <MenuItem key={persona.id} value={persona.id}>
-                    {persona.emoji} {persona.name}
-                  </MenuItem>
-                ))}
-              </Select>
+                Docs
+              </Typography>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: '#6B7280',
+                  '&:hover': { color: '#4F46E5' },
+                  cursor: 'pointer'
+                }}
+              >
+                Settings
+              </Typography>
             </Stack>
-            {currentPersona && (
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Typography variant="body2" color="text.secondary">
-                  {currentPersona.description}
-                </Typography>
-                <Chip 
-                  label={currentPersona.style} 
-                  size="small" 
-                  variant="outlined" 
-                  sx={{ 
-                    ml: 'auto',
-                    borderColor: '#2196F3',
-                    color: '#2196F3'
-                  }}
-                />
-              </Stack>
-            )}
-          </Stack>
-        </Box>
-        
+          </Toolbar>
+        </AppBar>
+
         <Box sx={{ 
           display: 'flex', 
           flexGrow: 1,
-          gap: 2,
-          p: 2,
+          gap: 0,
           overflow: 'hidden'
         }}>
           <Box sx={{ 
             width: '40%',
             display: 'flex',
             flexDirection: 'column',
+            borderRight: '1px solid #eaecf0',
             bgcolor: 'white',
-            borderRadius: 2,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            overflow: 'hidden'
           }}>
+            <Box sx={{ p: 3, borderBottom: '1px solid #eaecf0' }}>
+              <Stack spacing={1}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Chat with Helix
+                  </Typography>
+                </Stack>
+                <Typography variant="body2" color="text.secondary">
+                  I'll help you craft the perfect recruiting sequence
+                </Typography>
+              </Stack>
+            </Box>
             <ChatInterface
               messages={messages}
               onSendMessage={handleSendMessage}
@@ -325,10 +318,42 @@ function App() {
             display: 'flex',
             flexDirection: 'column',
             bgcolor: 'white',
-            borderRadius: 2,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            overflow: 'hidden'
           }}>
+            <Box sx={{ p: 3, borderBottom: '1px solid #eaecf0' }}>
+              <Stack spacing={1}>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Recruiting Sequence
+                  </Typography>
+                  <Box sx={{ flexGrow: 1 }} />
+                  <Select
+                    value={selectedPersona}
+                    onChange={handlePersonaChange}
+                    size="small"
+                    sx={{ 
+                      minWidth: 200,
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#E5E7EB',
+                      },
+                      '&:hover .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#4F46E5',
+                      },
+                    }}
+                  >
+                    {PERSONAS.map((persona) => (
+                      <MenuItem key={persona.id} value={persona.id}>
+                        {persona.emoji} {persona.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </Stack>
+                {currentPersona && (
+                  <Typography variant="body2" color="text.secondary">
+                    {currentPersona.description}
+                  </Typography>
+                )}
+              </Stack>
+            </Box>
             <Workspace 
               content={content}
               onChange={handleContentChange}

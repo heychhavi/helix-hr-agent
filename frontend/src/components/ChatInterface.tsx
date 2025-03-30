@@ -1,26 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, TextField, IconButton, Typography, Button, Paper } from '@mui/material';
+import { Box, Stack, TextField, IconButton, Typography, Avatar } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
 }
 
-interface Props {
+interface ChatInterfaceProps {
   messages: Message[];
   onSendMessage: (message: string) => void;
   onGenerateSequence: () => void;
 }
 
-const ChatInterface: React.FC<Props> = ({ messages, onSendMessage, onGenerateSequence }) => {
-  const [input, setInput] = useState('');
+const ChatInterface: React.FC<ChatInterfaceProps> = ({
+  messages,
+  onSendMessage,
+  onGenerateSequence
+}) => {
+  const [message, setMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
@@ -29,75 +31,75 @@ const ChatInterface: React.FC<Props> = ({ messages, onSendMessage, onGenerateSeq
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (input.trim()) {
-      onSendMessage(input.trim());
-      setInput('');
+    if (message.trim()) {
+      onSendMessage(message.trim());
+      setMessage('');
     }
   };
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ 
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+    }}>
       <Box sx={{ 
-        p: 2, 
-        borderBottom: 1, 
-        borderColor: 'divider',
+        flexGrow: 1, 
+        overflow: 'auto',
+        p: 3,
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+        flexDirection: 'column',
+        gap: 2
       }}>
-        <Typography variant="h6" color="text.primary">Chat</Typography>
-        <Button
-          variant="contained"
-          onClick={onGenerateSequence}
-          startIcon={<AutoAwesomeIcon />}
-          sx={{
-            background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-            boxShadow: '0 2px 4px rgba(33, 203, 243, .3)',
-            '&:hover': {
-              background: 'linear-gradient(45deg, #1976D2 30%, #21CBF3 90%)',
-            },
-          }}
-        >
-          Generate Sequence
-        </Button>
-      </Box>
-
-      <Box
-        ref={chatContainerRef}
-        sx={{
-          flexGrow: 1,
-          overflowY: 'auto',
-          p: 2,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 2,
-          bgcolor: '#f8f9fa',
-        }}
-      >
-        {messages.map((message, index) => (
-          <Box
+        {messages.map((msg, index) => (
+          <Stack
             key={index}
+            direction="row"
+            spacing={2}
+            alignItems="flex-start"
             sx={{
-              display: 'flex',
-              justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
+              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              maxWidth: '80%'
             }}
           >
-            <Paper
-              elevation={0}
+            {msg.role === 'assistant' && (
+              <Avatar 
+                sx={{ 
+                  bgcolor: '#4F46E5',
+                  width: 32,
+                  height: 32
+                }}
+              >
+                H
+              </Avatar>
+            )}
+            <Box
               sx={{
+                bgcolor: msg.role === 'user' ? '#4F46E5' : '#F3F4F6',
+                color: msg.role === 'user' ? 'white' : 'text.primary',
                 p: 2,
-                maxWidth: '80%',
                 borderRadius: 2,
-                bgcolor: message.role === 'user' ? '#2196F3' : 'white',
-                color: message.role === 'user' ? 'white' : 'text.primary',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                borderTopLeftRadius: msg.role === 'assistant' ? 0 : 2,
+                borderTopRightRadius: msg.role === 'user' ? 0 : 2,
               }}
             >
-              <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-                {message.content}
+              <Typography variant="body1">
+                {msg.content}
               </Typography>
-            </Paper>
-          </Box>
+            </Box>
+            {msg.role === 'user' && (
+              <Avatar 
+                sx={{ 
+                  bgcolor: '#E5E7EB',
+                  color: '#4B5563',
+                  width: 32,
+                  height: 32
+                }}
+              >
+                U
+              </Avatar>
+            )}
+          </Stack>
         ))}
         <div ref={messagesEndRef} />
       </Box>
@@ -107,46 +109,52 @@ const ChatInterface: React.FC<Props> = ({ messages, onSendMessage, onGenerateSeq
         onSubmit={handleSubmit}
         sx={{
           p: 2,
-          borderTop: 1,
-          borderColor: 'divider',
-          bgcolor: 'white',
+          borderTop: '1px solid #E5E7EB',
+          bgcolor: 'white'
         }}
       >
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Stack direction="row" spacing={1}>
           <TextField
             fullWidth
-            variant="outlined"
-            placeholder="Type your message..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
             size="small"
+            placeholder="Type your message..."
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
             sx={{
               '& .MuiOutlinedInput-root': {
-                borderRadius: 3,
-                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                  borderColor: '#2196F3',
+                bgcolor: '#F9FAFB',
+                '& fieldset': {
+                  borderColor: '#E5E7EB',
+                },
+                '&:hover fieldset': {
+                  borderColor: '#4F46E5',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: '#4F46E5',
                 },
               },
             }}
           />
           <IconButton 
             type="submit" 
-            disabled={!input.trim()}
-            sx={{
-              bgcolor: '#2196F3',
+            sx={{ 
+              bgcolor: '#4F46E5',
               color: 'white',
               '&:hover': {
-                bgcolor: '#1976D2',
-              },
-              '&.Mui-disabled': {
-                bgcolor: 'action.disabledBackground',
-                color: 'action.disabled',
+                bgcolor: '#4338CA',
               },
             }}
           >
             <SendIcon />
           </IconButton>
-        </Box>
+        </Stack>
+        <Typography 
+          variant="caption" 
+          color="text.secondary"
+          sx={{ mt: 1, display: 'block' }}
+        >
+          Press Enter to send, Shift+Enter for a new line
+        </Typography>
       </Box>
     </Box>
   );

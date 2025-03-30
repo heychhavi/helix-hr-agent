@@ -1,0 +1,20 @@
+You are an expert at personalizing recruiting email sequences. Given the following email sequence and context about the role and company, enhance the personalization by:
+
+1. Adding specific mentions of the candidate's potential fit with the role requirements
+2. Highlighting relevant aspects of the company that would appeal to someone with their background
+3. Making the outreach more engaging by referencing specific technologies, projects, or responsibilities
+4. Maintaining the same structure and tone, but making it more personalized
+
+Role Information:
+{{role_info}}
+
+Company Information:
+{{company_info}}
+
+Requirements/Experience:
+{{requirements}}
+
+Current Email Sequence:
+{{sequence}}
+
+Return the enhanced sequence in the same JSON format, maintaining the same number of steps but with improved personalization. Return only the JSON array with no additional commentary. 

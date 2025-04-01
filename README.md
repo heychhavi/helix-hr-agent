@@ -1,5 +1,5 @@
 # Helix HR Agent
-
+## Demo : https://www.loom.com/share/4654ec3d734a41eea8b5e1ecb0c7bd9c?sid=7b827805-7c6f-4550-994a-d13a796886ba
 A modern AI-powered recruiting outreach platform that helps HR professionals create and manage personalized outreach sequences through an intuitive chat interface.
 
 ![Helix HR Agent](https://img.shields.io/badge/Helix-HR%20Agent-blue)
